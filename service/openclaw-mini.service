@@ -1,0 +1,15 @@
+[Unit]
+Description=Mini OpenClaw Python Service
+After=network-online.target
+
+[Service]
+Type=simple
+User=__SERVICE_USER__
+WorkingDirectory=__PROJECT_DIR__
+Environment=PYTHONUNBUFFERED=1
+ExecStart=__PROJECT_DIR__/.venv/bin/openclaw-mini
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,25 @@
+[project]
+name = "openclaw-mini"
+version = "0.1.0"
+description = "Minimal OpenClaw-style Discord + OpenAI Codex bot in Python"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "discord.py>=2.4.0",
+  "openai>=2.0.0",
+  "python-dotenv>=1.0.1",
+]
+
+[project.scripts]
+openclaw-mini = "openclaw_mini.main:run"
+mini-openclaw = "openclaw_mini.main:run"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
