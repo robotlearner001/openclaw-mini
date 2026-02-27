@@ -16,7 +16,7 @@ HELP_TEXT = """Commands:
 - /skills Show available skills
 - /soul   Show current soul summary
 
-Anything else is sent to OpenAI Codex."""
+Anything else is sent to local Codex CLI."""
 
 
 def load_skill_cards(skills_dir: Path | None = None) -> list[tuple[str, str]]:

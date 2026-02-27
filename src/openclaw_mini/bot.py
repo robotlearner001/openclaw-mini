@@ -17,11 +17,7 @@ def build_discord_client(settings: Settings) -> discord.Client:
     intents.message_content = True
 
     client = discord.Client(intents=intents)
-    codex = CodexClient(
-        settings.openai_api_key,
-        settings.openai_model,
-        enable_web_search=settings.openai_enable_web_search,
-    )
+    codex = CodexClient(settings)
     skill_cards = load_skill_cards()
     skills_context = format_skill_cards_for_prompt(skill_cards)
 
@@ -51,14 +47,20 @@ def build_discord_client(settings: Settings) -> discord.Client:
 
         async with message.channel.typing():
             try:
-                result = codex.generate_reply(
+                conversation_key = (
+                    f"guild:{message.guild.id}:channel:{message.channel.id}"
+                    if message.guild is not None
+                    else f"dm:{message.channel.id}"
+                )
+                result = await codex.generate_reply(
+                    conversation_key=conversation_key,
                     soul=soul,
                     skills_context=skills_context,
                     user_text=text,
                 )
             except Exception as exc:  # noqa: BLE001
-                logger.exception("OpenAI request failed")
-                await message.reply(f"OpenAI request failed: {exc}")
+                logger.exception("Codex local request failed")
+                await message.reply(f"Codex local request failed: {exc}")
                 return
 
         await message.reply(result)
