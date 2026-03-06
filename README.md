@@ -88,7 +88,7 @@ openclaw-mini
 Session behavior:
 - Messages reuse a persistent Codex thread per Discord conversation (DM or channel).
 - If last activity is older than `CODEX_SESSION_TTL_SEC`, a new Codex session is started automatically.
-- Before a session rolls over (TTL expiry) or on process exit, transcript is archived into `CODEX_MEMORY_DIR` as a timestamped markdown file (`YYYY-MM-DD_HHMMSS_<conversation>.md`).
+- Session transcript is written to `CODEX_MEMORY_DIR` on every turn, then finalized on TTL rollover or process exit, as a timestamped markdown file (`YYYY-MM-DD_HHMMSS_<conversation>.md`).
 - Prompt instructions tell Codex to search `CODEX_MEMORY_DIR` first when a message is unclear or needs prior context.
 
 ## Discord setup notes
