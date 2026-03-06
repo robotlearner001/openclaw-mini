@@ -23,6 +23,8 @@ class Settings:
     codex_use_full_auto: bool
     codex_session_ttl_sec: int
     codex_session_store_path: Path
+    codex_memory_dir: Path
+    codex_session_max_turns: int
     codex_sandbox: str | None
     codex_ask_for_approval: str | None
     codex_dangerous_bypass: bool
@@ -120,6 +122,16 @@ def load_settings() -> Settings:
         "CODEX_ASK_FOR_APPROVAL",
     )
     codex_dangerous_bypass = _parse_bool(os.getenv("CODEX_DANGEROUS_BYPASS"), False)
+    memory_dir_raw = Path(os.getenv("CODEX_MEMORY_DIR", "memory")).expanduser()
+    if memory_dir_raw.is_absolute():
+        codex_memory_dir = memory_dir_raw
+    else:
+        codex_memory_dir = codex_workspace_root / memory_dir_raw
+    codex_session_max_turns = _parse_positive_int(
+        os.getenv("CODEX_SESSION_MAX_TURNS"),
+        200,
+        "CODEX_SESSION_MAX_TURNS",
+    )
 
     return Settings(
         discord_bot_token=discord_bot_token,
@@ -140,6 +152,8 @@ def load_settings() -> Settings:
         codex_session_store_path=Path(
             os.getenv("CODEX_SESSION_STORE_PATH", ".codex-discord-sessions.json"),
         ).expanduser(),
+        codex_memory_dir=codex_memory_dir,
+        codex_session_max_turns=codex_session_max_turns,
         codex_sandbox=codex_sandbox,
         codex_ask_for_approval=codex_ask_for_approval,
         codex_dangerous_bypass=codex_dangerous_bypass,

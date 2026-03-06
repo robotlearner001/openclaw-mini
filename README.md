@@ -66,6 +66,8 @@ Optional:
 - `CODEX_WORKSPACE_ROOT` (default: `.`)
 - `CODEX_SESSION_TTL_SEC` (default: `3600`, i.e. 1 hour)
 - `CODEX_SESSION_STORE_PATH` (default: `.codex-discord-sessions.json`)
+- `CODEX_MEMORY_DIR` (default: `memory`; session transcript archives written here)
+- `CODEX_SESSION_MAX_TURNS` (default: `200`; max in-progress turns kept before archive)
 
 If you want commands like "open browser to yahoo.com" to work from Discord, Codex must be allowed to run non-sandboxed commands. Set either:
 - Safer explicit mode:
@@ -86,6 +88,8 @@ openclaw-mini
 Session behavior:
 - Messages reuse a persistent Codex thread per Discord conversation (DM or channel).
 - If last activity is older than `CODEX_SESSION_TTL_SEC`, a new Codex session is started automatically.
+- Before a session rolls over (TTL expiry) or on process exit, transcript is archived into `CODEX_MEMORY_DIR` as a timestamped markdown file (`YYYY-MM-DD_HHMMSS_<conversation>.md`).
+- Prompt instructions tell Codex to search `CODEX_MEMORY_DIR` first when a message is unclear or needs prior context.
 
 ## Discord setup notes
 
