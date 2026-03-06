@@ -81,50 +81,56 @@ class CodexClient:
         record["memory_file"] = str(path)
         return path
 
-    def _write_session_memory(self, conversation_key: str, record: dict[str, object], reason: str) -> None:
+    def _append_session_memory(self, conversation_key: str, record: dict[str, object], reason: str) -> None:
         turns = record.get("turns")
         if not isinstance(turns, list) or not turns:
             return
 
         started_at = self._parse_iso_utc(record.get("started_at_iso"))
-        ended_at = datetime.now(timezone.utc)
+        event_at = datetime.now(timezone.utc)
         memory_path = self._ensure_session_memory_path(conversation_key, record)
         memory_path.parent.mkdir(parents=True, exist_ok=True)
+        file_exists = memory_path.exists()
 
-        lines = [
-            "# Mini OpenClaw Session Memory",
-            "",
-            f"- conversation_key: {conversation_key}",
-            f"- archived_at_utc: {ended_at.isoformat()}",
-            f"- archive_reason: {reason}",
-        ]
-        if started_at is not None:
-            lines.append(f"- session_started_at_utc: {started_at.isoformat()}")
+        written_turns_raw = record.get("written_turns")
+        written_turns = written_turns_raw if isinstance(written_turns_raw, int) else 0
+        if written_turns < 0:
+            written_turns = 0
+        if written_turns > len(turns):
+            written_turns = 0
 
-        thread_id = record.get("thread_id")
-        if isinstance(thread_id, str) and thread_id:
-            lines.append(f"- codex_thread_id: {thread_id}")
+        with memory_path.open("a", encoding="utf-8") as f:
+            if not file_exists:
+                lines = [
+                    "# Mini OpenClaw Session Memory",
+                    "",
+                    f"- conversation_key: {conversation_key}",
+                    f"- session_started_at_utc: {(started_at or event_at).isoformat()}",
+                ]
+                thread_id = record.get("thread_id")
+                if isinstance(thread_id, str) and thread_id:
+                    lines.append(f"- codex_thread_id: {thread_id}")
+                lines.extend(["", "## Transcript", ""])
+                f.write("\n".join(lines))
 
-        lines.extend(["", "## Transcript", ""])
+            for turn in turns[written_turns:]:
+                if not isinstance(turn, dict):
+                    continue
+                role = turn.get("role")
+                text = turn.get("text")
+                at = turn.get("at")
+                if not isinstance(role, str) or not isinstance(text, str):
+                    continue
+                timestamp = at if isinstance(at, str) and at else "unknown-time"
+                f.write(f"### {role} ({timestamp})\n\n{text.strip()}\n\n")
 
-        for turn in turns:
-            if not isinstance(turn, dict):
-                continue
-            role = turn.get("role")
-            text = turn.get("text")
-            at = turn.get("at")
-            if not isinstance(role, str) or not isinstance(text, str):
-                continue
-            timestamp = at if isinstance(at, str) and at else "unknown-time"
-            lines.append(f"### {role} ({timestamp})")
-            lines.append("")
-            lines.append(text.strip())
-            lines.append("")
+            if reason in {"ttl_expired", "process_exit"}:
+                f.write(f"- session_end_reason: {reason} at {event_at.isoformat()}\n")
 
-        memory_path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+        record["written_turns"] = len(turns)
 
     def _archive_session(self, conversation_key: str, record: dict[str, object], reason: str) -> None:
-        self._write_session_memory(conversation_key, record, reason)
+        self._append_session_memory(conversation_key, record, reason)
 
     def _archive_if_stale(self, conversation_key: str) -> None:
         record = self._session_store.get(conversation_key)
@@ -192,7 +198,7 @@ class CodexClient:
         record["last_active_at"] = now_epoch
 
         # Persist memory on every turn so context is searchable before TTL expiry.
-        self._write_session_memory(conversation_key, record, reason="in_progress")
+        self._append_session_memory(conversation_key, record, reason="in_progress")
         self._session_store[conversation_key] = record
         self._save_session_store()
 
