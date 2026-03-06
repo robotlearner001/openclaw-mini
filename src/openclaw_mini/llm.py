@@ -55,20 +55,40 @@ class CodexClient:
             slug = slug.replace("--", "-")
         return slug.strip("-")[:60] or "session"
 
-    def _memory_file_path(self, conversation_key: str, ended_at: datetime) -> Path:
-        stamp = ended_at.strftime("%Y-%m-%d_%H%M%S")
+    def _memory_file_path(self, conversation_key: str, timestamp: datetime) -> Path:
+        stamp = timestamp.strftime("%Y-%m-%d_%H%M%S")
         key_slug = self._safe_slug(conversation_key)
         filename = f"{stamp}_{key_slug}.md"
         return self._settings.codex_memory_dir / filename
 
-    def _archive_session(self, conversation_key: str, record: dict[str, object], reason: str) -> None:
+    def _parse_iso_utc(self, value: object) -> datetime | None:
+        if not isinstance(value, str) or not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+
+    def _ensure_session_memory_path(self, conversation_key: str, record: dict[str, object]) -> Path:
+        existing = record.get("memory_file")
+        if isinstance(existing, str) and existing:
+            return Path(existing)
+        started_at = self._parse_iso_utc(record.get("started_at_iso")) or datetime.now(timezone.utc)
+        path = self._memory_file_path(conversation_key, started_at)
+        record["memory_file"] = str(path)
+        return path
+
+    def _write_session_memory(self, conversation_key: str, record: dict[str, object], reason: str) -> None:
         turns = record.get("turns")
         if not isinstance(turns, list) or not turns:
             return
 
-        started_at = record.get("started_at_iso")
+        started_at = self._parse_iso_utc(record.get("started_at_iso"))
         ended_at = datetime.now(timezone.utc)
-        memory_path = self._memory_file_path(conversation_key, ended_at)
+        memory_path = self._ensure_session_memory_path(conversation_key, record)
         memory_path.parent.mkdir(parents=True, exist_ok=True)
 
         lines = [
@@ -78,8 +98,8 @@ class CodexClient:
             f"- archived_at_utc: {ended_at.isoformat()}",
             f"- archive_reason: {reason}",
         ]
-        if isinstance(started_at, str) and started_at:
-            lines.append(f"- session_started_at_utc: {started_at}")
+        if started_at is not None:
+            lines.append(f"- session_started_at_utc: {started_at.isoformat()}")
 
         thread_id = record.get("thread_id")
         if isinstance(thread_id, str) and thread_id:
@@ -102,6 +122,9 @@ class CodexClient:
             lines.append("")
 
         memory_path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+
+    def _archive_session(self, conversation_key: str, record: dict[str, object], reason: str) -> None:
+        self._write_session_memory(conversation_key, record, reason)
 
     def _archive_if_stale(self, conversation_key: str) -> None:
         record = self._session_store.get(conversation_key)
@@ -168,6 +191,8 @@ class CodexClient:
         record["turns"] = turns
         record["last_active_at"] = now_epoch
 
+        # Persist memory on every turn so context is searchable before TTL expiry.
+        self._write_session_memory(conversation_key, record, reason="in_progress")
         self._session_store[conversation_key] = record
         self._save_session_store()
 
@@ -207,8 +232,10 @@ class CodexClient:
         memory_hint = (
             "MEMORY POLICY:\n"
             f"- Session memory files are stored in: {memory_dir}\n"
-            "- If the user message is unclear, references prior talks, or needs extra context, search this memory folder first.\n"
-            "- Use memory facts only when relevant to the current message; do not invent missing context."
+            "- Do not search memory by default for every message.\n"
+            "- Search memory when the user explicitly asks to check memory, when the message depends on prior context, or when needed context is missing.\n"
+            "- If memory is relevant, use only facts directly related to the current request.\n"
+            "- If memory is not found or still unclear, ask a concise clarification question instead of guessing."
         )
 
         instructions = (
