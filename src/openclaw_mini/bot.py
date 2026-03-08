@@ -10,6 +10,38 @@ from .skills import format_skill_cards_for_prompt, handle_skill_command, load_sk
 from .soul import load_soul
 
 logger = logging.getLogger(__name__)
+DISCORD_MESSAGE_SAFE_LIMIT = 1900
+
+
+def _chunk_text(text: str, max_len: int = DISCORD_MESSAGE_SAFE_LIMIT) -> list[str]:
+    if len(text) <= max_len:
+        return [text]
+
+    remaining = text
+    chunks: list[str] = []
+    while len(remaining) > max_len:
+        split_at = remaining.rfind("\n", 0, max_len + 1)
+        if split_at < max_len // 2:
+            split_at = remaining.rfind(" ", 0, max_len + 1)
+        if split_at < max_len // 2:
+            split_at = max_len
+
+        chunk = remaining[:split_at].rstrip()
+        if not chunk:
+            chunk = remaining[:max_len]
+            split_at = max_len
+        chunks.append(chunk)
+        remaining = remaining[split_at:].lstrip()
+
+    if remaining:
+        chunks.append(remaining)
+    return chunks
+
+
+async def _reply_in_chunks(message: discord.Message, text: str) -> None:
+    content = text or ""
+    for chunk in _chunk_text(content):
+        await message.reply(chunk, mention_author=False)
 
 
 def build_discord_client(settings: Settings) -> discord.Client:
@@ -42,7 +74,7 @@ def build_discord_client(settings: Settings) -> discord.Client:
 
         skill_result = handle_skill_command(text, soul_excerpt, skill_cards)
         if skill_result.handled:
-            await message.reply(skill_result.response or "")
+            await _reply_in_chunks(message, skill_result.response or "")
             return
 
         async with message.channel.typing():
@@ -60,9 +92,9 @@ def build_discord_client(settings: Settings) -> discord.Client:
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Codex local request failed")
-                await message.reply(f"Codex local request failed: {exc}")
+                await _reply_in_chunks(message, f"Codex local request failed: {exc}")
                 return
 
-        await message.reply(result)
+        await _reply_in_chunks(message, result)
 
     return client
